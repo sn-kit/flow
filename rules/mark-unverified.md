@@ -52,14 +52,15 @@ Before a self-produced number justifies an action:
 2. **Sanity-check the magnitude** against something independent. A figure that implies an impossible ratio (a 100 MB input producing a 7 GB peak; a component at 4% of the total you were about to optimise) is a signal the harness is wrong, not a finding.
 3. **State the instrument** when reporting, because it bounds the claim: `/usr/bin/time -l` max RSS, in-process `ru_maxrss`, `docker stats` (**includes page cache**), 60-second forensic sampling (**misses short peaks**). These do not measure the same thing and routinely disagree.
 4. **Prefer the mechanism to the number.** "Peak is inside `sherpa_onnx.process()`" survives a bad measurement; "peak is 2,443 MB" does not.
+5. **Read the flagged cases, don't just count them.** When a self-built diagnostic flags anomalies (miss-rate, leakage, mismatch, extraction-bias counts), print every flagged example and read the raw record before interpreting the count. Never write the hypothesised cause into the diagnostic's output label ("basename in prose, no path"). The label then reports the hypothesis as if it were an observation, and a different cause (a bug) passes as confirmation. Persist the examples alongside the count so a reviewer can open them. Trigger incident: `2026-09-23` coding-agents-accountability. A miss-rate check flagged exactly the 4 runs mis-scored by a path-normalisation bug, labelled them as the hypothesised cause, and was never opened; the bug reached an ICSE submission.
 
 When a number cannot be reproduced, **say so and stop** — do not average the disagreeing runs, do not pick the convenient one, and do not proceed to a fix. Mark it `[UNVERIFIED]` and act only on whatever independent evidence exists.
 
-Trigger incident: `2026-07-25` meeting-transcribe memory investigation. Three consecutive recommendations — chunk a 4 GB audio buffer, add a duration guard, set `num_threads=1` — were each refuted by the next measurement (the buffer was 4.2% of peak; peak was flat across a 4× duration range; `num_threads=1` halved memory at 7 min and *increased* it at 28 min). Four instruments disagreed on the same workload. See [`log/incidents/2026-07-25_measurement-discipline.md`](../log/incidents/2026-07-25_measurement-discipline.md).
+Trigger incident: `2026-07-25` meeting-transcribe memory investigation. Three consecutive recommendations — chunk a 4 GB audio buffer, add a duration guard, set `num_threads=1` — were each refuted by the next measurement (the buffer was 4.2% of peak; peak was flat across a 4× duration range; `num_threads=1` halved memory at 7 min and *increased* it at 28 min). Four instruments disagreed on the same workload. See `log/incidents/2026-07-25_measurement-discipline.md`.
 
 ## Sibling: claim-strength drift during revision
 
-This rule covers claims that were never verified. Its revision-time sibling is the **claim-strength ladder** ([`docs/reference/claim-strength-ladder.md`](../docs/reference/claim-strength-ladder.md)): an already-verified claim must not silently move up or down the epistemic-strength scale (*is consistent with < associated < predicts < causes*) during a rewrite — including by hedge deletion — without an authorizing revision-plan item. The deterministic complement `.scripts/check_token_conservation.py` verifies numeric/citation/protected-term tokens survive a revision unchanged. (Ported from academic-research-skills v3.19, 2026-07-24.)
+This rule covers claims that were never verified. Its revision-time sibling is the **claim-strength ladder** (`docs/reference/claim-strength-ladder.md`): an already-verified claim must not silently move up or down the epistemic-strength scale (*is consistent with < associated < predicts < causes*) during a rewrite — including by hedge deletion — without an authorizing revision-plan item. The deterministic complement `.scripts/check_token_conservation.py` verifies numeric/citation/protected-term tokens survive a revision unchanged. (Ported from academic-research-skills v3.19, 2026-07-24.)
 
 ## When This Applies
 
@@ -87,7 +88,7 @@ Where the verification should come from, by claim type:
 | Venue review style (single/double-blind) | Official CFP |
 | Statistic from a paper | The paper PDF, current session-readable |
 | Author affiliation | Author's institutional page or ORCID |
-| Journal impact factor | **JCR / Clarivate only** — see [`venue-metrics.md`](venue-metrics.md). **Not OpenAlex**: `summary_stats.2yr_mean_citedness` is a different metric and returns near-zero values when OpenAlex mis-matches the source. If JCR is unavailable, leave the field empty and record SJR from the local SCImago snapshot instead |
+| Journal impact factor | **JCR / Clarivate only** — see `venue-metrics.md`. **Not OpenAlex**: `summary_stats.2yr_mean_citedness` is a different metric and returns near-zero values when OpenAlex mis-matches the source. If JCR is unavailable, leave the field empty and record SJR from the local SCImago snapshot instead |
 | Journal SJR / quartile / h-index | `scripts/venue-rankings-lookup.py` — local snapshots, no web call |
 
 ## Anti-Patterns
@@ -106,9 +107,9 @@ This rule was promoted to a global rule on 2026-05-10 after recurring incidents:
 
 ## Failure modes prevented
 
-- **F1** fabricated citation — see [`docs/reference/failure-modes.md`](../docs/reference/failure-modes.md)
-- **F2** hallucinated venue policy — see [`docs/reference/failure-modes.md`](../docs/reference/failure-modes.md)
-- **F3** phantom quote from memory — see [`docs/reference/failure-modes.md`](../docs/reference/failure-modes.md)
-- **F4** invented bib key — see [`docs/reference/failure-modes.md`](../docs/reference/failure-modes.md)
-- **F6** stripped `[UNVERIFIED]` flag — see [`docs/reference/failure-modes.md`](../docs/reference/failure-modes.md)
+- **F1** fabricated citation — see `docs/reference/failure-modes.md`
+- **F2** hallucinated venue policy — see `docs/reference/failure-modes.md`
+- **F3** phantom quote from memory — see `docs/reference/failure-modes.md`
+- **F4** invented bib key — see `docs/reference/failure-modes.md`
+- **F6** stripped `[UNVERIFIED]` flag — see `docs/reference/failure-modes.md`
 - **F10** single-run measurement drove a recommendation — a self-produced number acted on before it reproduced, or reported without naming the instrument (2026-07-25 meeting-transcribe: three successive fixes each refuted by the next measurement)

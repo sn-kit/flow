@@ -2,7 +2,7 @@
 
 A Python package for multi-model LLM deliberation (formerly `llm-council`). Orchestrates independent assessments from multiple AI models, conducts anonymous peer review, and synthesises consensus through a chairman model.
 
-Routes across **OpenRouter, OpenAI, Anthropic, Gemini, and Mistral** via OpenAI-compatible endpoints — use a single OpenRouter key for everything, or mix native provider keys.
+Routes every model through **OpenRouter** with a single `OPENROUTER_API_KEY`. Native provider APIs (OpenAI, Anthropic, Gemini, Mistral) are retired: the client refuses any other provider or base URL.
 
 ## The 3-Stage Protocol
 
@@ -91,7 +91,7 @@ asyncio.run(main())
 
 ### LLMClient
 
-Generic async LLM client supporting multiple providers.
+Async LLM client for OpenRouter (the only supported provider).
 
 ```python
 client = LLMClient(
@@ -100,15 +100,12 @@ client = LLMClient(
     max_tokens: int = 4096,
     json_retry_attempts: int = 2,
     *,
-    provider: str | None = None,     # "openrouter"|"openai"|"anthropic"|"gemini"|"mistral"
-    base_url: str | None = None,     # Override the provider's base URL
+    provider: str | None = None,     # only "openrouter"; anything else raises ValueError
+    base_url: str | None = None,     # only the OpenRouter base URL; anything else raises ValueError
 )
 ```
 
-**Provider resolution** (when `provider` is not set explicitly):
-
-1. Model-prefix match — `anthropic/claude-*` → Anthropic if `ANTHROPIC_API_KEY` set
-2. Priority fallback — OpenRouter > OpenAI > Anthropic > Gemini > Mistral (first available key)
+**Credentials:** the key comes from `api_key` or `OPENROUTER_API_KEY`; a missing key raises `ValueError`. Model IDs are vendor-qualified OpenRouter IDs (for example `anthropic/claude-opus-4-7`) and are passed through unchanged.
 
 Or use the `from_env()` factory for pure environment-driven auto-detection:
 
@@ -125,15 +122,7 @@ client = LLMClient.from_env(model="anthropic/claude-opus-4-7")
 | `chat_text(system, user_msg, *, model=None, max_tokens=None, reasoning_effort=None)` | `str` | Send message, return raw text |
 | `close()` | `None` | Close the async HTTP client |
 
-**Reasoning tokens** (`reasoning_effort` = `"low"` | `"medium"` | `"high"`) are mapped to each provider's native parameter:
-
-| Provider | Parameter |
-|----------|-----------|
-| OpenRouter | `extra_body.reasoning.max_tokens` (budget computed from ratio) |
-| Anthropic | `extra_body.thinking.budget_tokens` |
-| OpenAI | `reasoning_effort` string |
-| Gemini | `extra_body.thinking.budget_tokens` |
-| Mistral | not supported (silently ignored) |
+**Reasoning tokens** (`reasoning_effort` = `"low"` | `"medium"` | `"high"`) become OpenRouter's `extra_body.reasoning.max_tokens`, a budget computed as a ratio of `max_tokens` (minimum 1024).
 
 If reasoning consumes all output tokens (empty response), the client auto-retries up to 3 times with doubled `max_tokens`.
 
@@ -171,6 +160,8 @@ result = await council.run_council(
     existing_model: str | None = None,        # Which model produced existing_result
     stage2_system: str | None = None,         # Custom peer review prompt
     stage3_prompt_builder: Callable | None = None,  # Custom chairman prompt builder
+    checkpoint_dir: str | Path | None = None, # Save each stage (see Checkpointing)
+    resume: bool = False,                     # Continue the latest checkpointed run
 )
 ```
 
@@ -186,6 +177,8 @@ result = await council.run_council(
 | `existing_model` | No | Model ID that produced `existing_result` |
 | `stage2_system` | No | Override the default peer review system prompt |
 | `stage3_prompt_builder` | No | Callable `(assessments, peer_reviews, user_msg) -> str` |
+| `checkpoint_dir` | No | Directory for per-stage checkpoints; off when omitted (see [Checkpointing and resume](#checkpointing-and-resume)) |
+| `resume` | No | With `checkpoint_dir`, reload the latest run's completed stages instead of re-querying |
 
 **Returns:** `CouncilResult` (see [Data Models](#data-models)).
 
@@ -250,7 +243,7 @@ class CouncilMeta(BaseModel):
     total_ms: int = 0                            # Total wall-clock time
     reused_model: str | None = None              # Model whose result was reused (if any)
     aggregate_rankings: list[dict] = Field(...)  # Sorted by average_rank
-    stage3_fallback: bool = False                # True if chairman failed → used top assessment
+    stage3_fallback: bool = False                # True if chairman failed → used the top-ranked assessment
 ```
 
 **`aggregate_rankings`** — computed from all peer reviews:
@@ -387,13 +380,46 @@ result = await council.run_council(
 )
 ```
 
+### Checkpointing and resume
+
+`CouncilCheckpointer` saves each stage to disk, so a council that dies part
+way through can resume without paying for Stage 1 again. It is off unless
+you pass `checkpoint_dir`, and the CLI has no flag for it.
+
+```python
+result = await council.run_council(..., checkpoint_dir=".council")               # writes checkpoints
+result = await council.run_council(..., checkpoint_dir=".council", resume=True)  # continues the latest run
+```
+
+- **Files.** Each run gets a UTC timestamp ID and writes
+  `<run_id>-stage1.json`, `-stage2.json` and `-stage3.json`. Writes are atomic
+  (temp file, fsync, rename). A corrupt file is logged and treated as missing.
+- **Resume.** With `resume=True`, the service picks the newest run in the
+  directory, reloads its completed Stage 1 and Stage 2 results, and runs the
+  rest. Stage 3 always runs again. With no earlier run, it starts fresh.
+- **Resume does not check the prompt or the models.** It reloads the newest
+  run whatever it was asked. Resuming with a different `user_msg` mixes old
+  assessments with new reviews. Use one directory per question, or call
+  `clean()` first.
+- **Stage 3 is saved even on fallback.** If the chairman fails, the saved
+  Stage 3 file holds the fallback result (see
+  [Fallback Handling](#fallback-handling)). Resume ignores it because Stage 3
+  always re-runs. Code that reads `load_stage3()` directly, however, cannot
+  tell a fallback from a real synthesis. Use the returned
+  `CouncilResult.meta.stage3_fallback`.
+- Keep the directory out of version control (conventionally `.council/`).
+
+Lower-level methods: `save_stage1/2/3`, `load_stage1/2/3`,
+`last_completed_stage()`, `find_latest_run()`, `pending_participants()` and
+`clean()`.
+
 ### Fallback Handling
 
-If the chairman model fails (network error, malformed response), the council falls back to the top-ranked assessment from Stage 2:
+If the chairman model fails (network error, malformed response), the council falls back to the **top-ranked assessment** from the Stage 2 peer review (the first entry in `meta.aggregate_rankings`). If nothing was ranked, for example because every peer review failed, it uses the first successful Stage 1 assessment:
 
 ```python
 if result.meta.stage3_fallback:
-    print("Warning: Chairman synthesis failed — using top-ranked assessment")
+    print("Warning: Chairman synthesis failed — using the top-ranked assessment")
 ```
 
 ## CLI
@@ -456,6 +482,7 @@ Defaults are persisted to `~/.config/council-api/config.json` and used automatic
 council_api/
 ├── __init__.py      # Public API exports
 ├── __main__.py      # CLI entry point
+├── checkpoint.py    # CouncilCheckpointer (per-stage checkpoints, resume)
 ├── client.py        # LLMClient + error classes
 ├── models.py        # Pydantic models (CouncilResult, etc.)
 ├── config.py        # Model registry, pricing, defaults
@@ -464,11 +491,11 @@ council_api/
 
 ## Design Decisions
 
-- **OpenRouter default, native providers available** — one `OPENROUTER_API_KEY` accesses all models. Pass `provider="anthropic"` (or set `LLM_PROVIDER=anthropic`) to route to native APIs when you want lower latency, larger context windows, or direct billing.
+- **OpenRouter only** — one `OPENROUTER_API_KEY` accesses all models. Native provider routing was retired; `provider=` and `LLM_PROVIDER` accept only `openrouter`.
 - **Schema-agnostic** — the council doesn't know what JSON schema you're using. It passes through whatever Stage 1 returns. Your application defines the schema via the system prompt.
 - **Anonymous peer review** — assessments are labeled "Assessment A/B/C" during Stage 2. Model identities are only revealed in metadata.
 - **Parallel execution** — Stage 1 and Stage 2 queries run concurrently via `asyncio.gather`. Wall-clock time is limited by the slowest model, not the sum.
-- **Graceful degradation** — if a Stage 1 model fails, the council continues with the remaining assessments. If the chairman fails, it falls back to the top-ranked assessment.
+- **Graceful degradation** — if a Stage 1 model fails, the council continues with the remaining assessments. If the chairman fails, it falls back to the top-ranked assessment (or the first one if nothing was ranked) and sets `meta.stage3_fallback`.
 
 ## Cost Estimate
 

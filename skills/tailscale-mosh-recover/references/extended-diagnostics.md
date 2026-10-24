@@ -120,7 +120,7 @@ This flushes the DNS cache and reloads the resolver. `tailscale set --accept-dns
 As a durable workaround if you can't reliably flush, write Tailscale FQDNs into `~/.ssh/config` rather than bare names:
 
 ```ssh-config
-Host uos
+Host laptop
     HostName my-laptop.<tailnet>.ts.net   # full tailnet FQDN — resolves even when bare-hostname routing is stuck
 ```
 
@@ -180,7 +180,7 @@ export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"
 mosh --server=/opt/homebrew/bin/mosh-server mini -- tmux a -t <session>
 ```
 
-Canonical reference: [`docs/setup/terminal-setup/terminal-setup.tex`](../../docs/setup/terminal-setup/terminal-setup.tex) § Mosh for Resilient Connections → Non-interactive Shell PATH.
+Canonical reference: `docs/setup/terminal-setup/terminal-setup.tex` § Mosh for Resilient Connections → Non-interactive Shell PATH.
 
 ### Origin
 

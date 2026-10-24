@@ -107,7 +107,7 @@ Project knowledge articles are the upstream source that `wiki-grow`
 promotes into vault concepts (`~/vault/concepts/`). Articles
 that escape their origin project (mentioned in ≥3 corpus docs) get
 auto-promoted as `status: draft` and later curated to the **concept
-anatomy** (`packages/atlas-vault/schema.md` → "Concept File Schema"):
+anatomy** (`packages/research-atlas-schema/schema.md` → "Concept File Schema"):
 a lead `## In one line` definition, encyclopedia-voice body, and a
 `## In my portfolio` section for project-specific prose.
 
@@ -177,5 +177,5 @@ Write `correspondence/internal-reviews/KNOWLEDGE-LINT-REPORT.md` (create directo
 |-------|-------------|
 | `compile-knowledge` | Run this first to build/update the wiki |
 | `store-insight` | Use to fix individual gaps found by lint |
-| `atlas-coherence` | Complementary — checks topic-level connections, not article-level |
+| `research-atlas-coherence` | Complementary — checks topic-level connections, not article-level |
 | `wiki-curate` | Downstream — audits the vault concepts these articles promote into (anatomy, lifecycle, overlap) |

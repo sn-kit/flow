@@ -27,7 +27,7 @@ skill-dependencies: [wiki-merge]
 
 - For project knowledge folders — those are audited via
   `knowledge-lint`.
-- For atlas topics — that's `atlas-audit`.
+- For atlas topics — that's `research-atlas-audit`.
 - For mechanical edits — this skill never writes. Use `wiki-merge` to
   collapse overlap clusters and the planned tag-inference pass in
   `wiki-grow` to backfill missing tags.
@@ -111,7 +111,7 @@ The `status:` frontmatter field is the lifecycle axis: `draft`
 concept anatomy). Status is read from frontmatter with the same
 fallback as atlas-workspace (`auto_generated: true` → draft, else
 curated) so pages predating the field classify correctly. The
-anatomy is defined in `packages/atlas-vault/schema.md` → "Concept
+anatomy is defined in `packages/research-atlas-schema/schema.md` → "Concept
 File Schema":
 
 - `## In one line` — required definition block (machine-anchored).
@@ -206,5 +206,5 @@ After running:
 | `wiki-grow` | Writes the auto-promoted concepts this skill audits. |
 | `wiki-merge` | Acts on the overlap clusters this skill finds (planned — not yet built). |
 | `compile-knowledge` | Upstream of `wiki-grow`; produces the project knowledge articles that get promoted. |
-| `atlas-audit` | Audits atlas topics; complementary lens. |
+| `research-atlas-audit` | Audits atlas topics; complementary lens. |
 | `knowledge-lint` | Audits per-project knowledge folders; complementary lens. |
